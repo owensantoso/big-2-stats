@@ -384,7 +384,6 @@ a {
   box-shadow: 0 10px 24px rgba(138, 109, 17, 0.12);
   color: #5a4210;
   pointer-events: auto;
-  backdrop-filter: blur(3px);
 }
 
 .floating-note.is-editing {

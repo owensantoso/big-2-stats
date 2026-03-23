@@ -32,7 +32,9 @@ export function SummaryCards({ stats }: SummaryCardsProps) {
   const leaderCaption =
     stats.leader.leader === 'Tie'
       ? 'Both players are level overall.'
-      : `Ahead by ${stats.leader.margin} wins overall.`
+      : stats.leader.leader === 'Owen'
+        ? `Ahead by ${stats.leader.margin} wins overall. As expected.`
+        : `Ahead by ${stats.leader.margin} wins overall.`
 
   const leaderAccentClassName =
     stats.leader.leader === 'Owen'

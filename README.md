@@ -91,9 +91,13 @@ This app is static-only and can be deployed to GitHub Pages or Vercel.
 
 ### GitHub Pages
 
-- Build with `npm run build`
-- Publish the `dist/` output with your preferred Pages flow
-- Set the `VITE_SHEET_CSV_URL` environment variable at build time if your deploy flow supports it
+Use a GitHub Actions Pages deploy.
+
+1. Add a repository variable named `VITE_SHEET_CSV_URL`.
+2. In GitHub `Settings` -> `Pages`, set the source to `GitHub Actions`.
+3. Push to `main`.
+
+The workflow at `.github/workflows/deploy-pages.yml` will build `dist/` and deploy it.
 
 ### Vercel
 

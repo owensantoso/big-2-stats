@@ -1,17 +1,26 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 type FloatingNote = {
   id: string
+  type: 'text' | 'drawing'
   text: string
+  drawingUrl: string | null
   xPercent: number
   yOffset: number
   createdAt: string
 }
 
-type DraftNote = {
+type DraftTextNote = {
+  type: 'text'
   xPercent: number
   yOffset: number
   text: string
+} | null
+
+type DraftDrawingNote = {
+  type: 'drawing'
+  xPercent: number
+  yOffset: number
 } | null
 
 type DragState = {
@@ -24,6 +33,8 @@ const STORAGE_KEY = 'big-2-stats-floating-notes'
 const CLEAR_ALL_PASSWORD = 'omegalul'
 const MIN_X_PERCENT = 1
 const MAX_X_PERCENT = 92
+const DRAWING_WIDTH = 220
+const DRAWING_HEIGHT = 120
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max)
@@ -61,7 +72,7 @@ function loadNotes(): FloatingNote[] {
     }
 
     return parsed.flatMap((note) => {
-      if (typeof note !== 'object' || note === null || !('id' in note) || !('text' in note)) {
+      if (typeof note !== 'object' || note === null || !('id' in note)) {
         return []
       }
 
@@ -77,17 +88,29 @@ function loadNotes(): FloatingNote[] {
           : 'y' in note && typeof note.y === 'number'
             ? note.y
             : null
+      const text = 'text' in note && typeof note.text === 'string' ? note.text : ''
+      const drawingUrl =
+        'drawingUrl' in note && typeof note.drawingUrl === 'string'
+          ? note.drawingUrl
+          : null
 
       if (
         typeof note.id === 'string' &&
-        typeof note.text === 'string' &&
         maybeXPercent !== null &&
-        maybeYOffset !== null
+        maybeYOffset !== null &&
+        (text.trim().length > 0 || drawingUrl)
       ) {
         return [
           {
             id: note.id,
-            text: note.text,
+            type:
+              'type' in note && note.type === 'drawing'
+                ? 'drawing'
+                : drawingUrl && text.trim().length === 0
+                  ? 'drawing'
+                  : 'text',
+            text,
+            drawingUrl,
             xPercent: clamp(maybeXPercent, MIN_X_PERCENT, MAX_X_PERCENT),
             yOffset: Math.max(maybeYOffset, 0),
             createdAt: toIsoStringOrNow('createdAt' in note ? note.createdAt : null),
@@ -111,19 +134,41 @@ function formatCreatedAt(value: string): string {
   }).format(new Date(value))
 }
 
-function buildNotePreview(value: string): string {
-  return value.length > 52 ? `${value.slice(0, 52).trim()}...` : value
+function buildNotePreview(note: FloatingNote): string {
+  if (note.type === 'drawing') {
+    return 'Drawing annotation'
+  }
+
+  return note.text.length > 52 ? `${note.text.slice(0, 52).trim()}...` : note.text
+}
+
+function initializeDrawingCanvas(canvas: HTMLCanvasElement) {
+  const context = canvas.getContext('2d')
+
+  if (!context) {
+    return
+  }
+
+  context.fillStyle = 'rgba(255, 250, 240, 0.94)'
+  context.fillRect(0, 0, canvas.width, canvas.height)
+  context.lineCap = 'round'
+  context.lineJoin = 'round'
+  context.strokeStyle = '#5a4210'
+  context.lineWidth = 3
 }
 
 export function FloatingNotes() {
   const [notes, setNotes] = useState<FloatingNote[]>(() => loadNotes())
-  const [isPlacing, setIsPlacing] = useState(false)
+  const [placementMode, setPlacementMode] = useState<'text' | 'drawing' | null>(null)
   const [isEditingPositions, setIsEditingPositions] = useState(false)
-  const [draftNote, setDraftNote] = useState<DraftNote>(null)
+  const [draftTextNote, setDraftTextNote] = useState<DraftTextNote>(null)
+  const [draftDrawingNote, setDraftDrawingNote] = useState<DraftDrawingNote>(null)
   const [isCollapsed, setIsCollapsed] = useState(true)
   const [showWrongPassword, setShowWrongPassword] = useState(false)
   const [highlightedNoteId, setHighlightedNoteId] = useState<string | null>(null)
   const [dragState, setDragState] = useState<DragState>(null)
+  const drawingCanvasRef = useRef<HTMLCanvasElement | null>(null)
+  const isDrawingRef = useRef(false)
 
   useEffect(() => {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(notes))
@@ -192,6 +237,14 @@ export function FloatingNotes() {
     }
   }, [dragState])
 
+  useEffect(() => {
+    if (!draftDrawingNote || !drawingCanvasRef.current) {
+      return
+    }
+
+    initializeDrawingCanvas(drawingCanvasRef.current)
+  }, [draftDrawingNote])
+
   const noteCountLabel = useMemo(() => {
     if (notes.length === 1) {
       return '1 annotation'
@@ -206,8 +259,14 @@ export function FloatingNotes() {
     })
   }, [notes])
 
+  const resetDrafts = () => {
+    setDraftTextNote(null)
+    setDraftDrawingNote(null)
+    setPlacementMode(null)
+  }
+
   const handlePlacementClick = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (draftNote || isEditingPositions) {
+    if ((draftTextNote || draftDrawingNote) || isEditingPositions || !placementMode) {
       return
     }
 
@@ -219,19 +278,24 @@ export function FloatingNotes() {
     )
     const yOffset = Math.max(event.clientY - bounds.top, 0)
 
-    setDraftNote({ xPercent, yOffset, text: '' })
-    setIsPlacing(false)
+    if (placementMode === 'text') {
+      setDraftTextNote({ type: 'text', xPercent, yOffset, text: '' })
+    } else {
+      setDraftDrawingNote({ type: 'drawing', xPercent, yOffset })
+    }
+
+    setPlacementMode(null)
   }
 
-  const saveDraftNote = () => {
-    if (!draftNote) {
+  const saveDraftTextNote = () => {
+    if (!draftTextNote) {
       return
     }
 
-    const text = draftNote.text.trim()
+    const text = draftTextNote.text.trim()
 
     if (!text) {
-      setDraftNote(null)
+      setDraftTextNote(null)
       return
     }
 
@@ -239,13 +303,43 @@ export function FloatingNotes() {
       ...currentNotes,
       {
         id: createNoteId(),
+        type: 'text',
         text,
-        xPercent: draftNote.xPercent,
-        yOffset: draftNote.yOffset,
+        drawingUrl: null,
+        xPercent: draftTextNote.xPercent,
+        yOffset: draftTextNote.yOffset,
         createdAt: new Date().toISOString(),
       },
     ])
-    setDraftNote(null)
+    setDraftTextNote(null)
+  }
+
+  const clearDraftDrawing = () => {
+    if (drawingCanvasRef.current) {
+      initializeDrawingCanvas(drawingCanvasRef.current)
+    }
+  }
+
+  const saveDraftDrawingNote = () => {
+    if (!draftDrawingNote || !drawingCanvasRef.current) {
+      return
+    }
+
+    const drawingUrl = drawingCanvasRef.current.toDataURL('image/png')
+
+    setNotes((currentNotes) => [
+      ...currentNotes,
+      {
+        id: createNoteId(),
+        type: 'drawing',
+        text: '',
+        drawingUrl,
+        xPercent: draftDrawingNote.xPercent,
+        yOffset: draftDrawingNote.yOffset,
+        createdAt: new Date().toISOString(),
+      },
+    ])
+    setDraftDrawingNote(null)
   }
 
   const focusNote = (id: string) => {
@@ -295,8 +389,7 @@ export function FloatingNotes() {
       return
     }
 
-    setDraftNote(null)
-    setIsPlacing(false)
+    resetDrafts()
     setIsEditingPositions(true)
   }
 
@@ -331,9 +424,52 @@ export function FloatingNotes() {
     }
 
     setNotes([])
-    setDraftNote(null)
-    setIsPlacing(false)
+    resetDrafts()
+    setIsEditingPositions(false)
     setHighlightedNoteId(null)
+  }
+
+  const startPlacementMode = (mode: 'text' | 'drawing') => {
+    setIsEditingPositions(false)
+    setDragState(null)
+    setDraftTextNote(null)
+    setDraftDrawingNote(null)
+    setPlacementMode((currentMode) => (currentMode === mode ? null : mode))
+  }
+
+  const handleDrawingPointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    const canvas = event.currentTarget
+    const context = canvas.getContext('2d')
+
+    if (!context) {
+      return
+    }
+
+    const bounds = canvas.getBoundingClientRect()
+    context.beginPath()
+    context.moveTo(event.clientX - bounds.left, event.clientY - bounds.top)
+    isDrawingRef.current = true
+  }
+
+  const handleDrawingPointerMove = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!isDrawingRef.current) {
+      return
+    }
+
+    const canvas = event.currentTarget
+    const context = canvas.getContext('2d')
+
+    if (!context) {
+      return
+    }
+
+    const bounds = canvas.getBoundingClientRect()
+    context.lineTo(event.clientX - bounds.left, event.clientY - bounds.top)
+    context.stroke()
+  }
+
+  const stopDrawing = () => {
+    isDrawingRef.current = false
   }
 
   return (
@@ -379,16 +515,20 @@ export function FloatingNotes() {
         <div className={`annotation-panel-body ${isCollapsed ? 'is-collapsed' : ''}`.trim()}>
           <div className="floating-notes-actions">
             <button
-              className={`floating-action-button ${isPlacing ? 'active' : ''}`.trim()}
+              className={`floating-action-button ${placementMode === 'text' ? 'active' : ''}`.trim()}
               type="button"
-              onClick={() => {
-                setIsEditingPositions(false)
-                setDragState(null)
-                setDraftNote(null)
-                setIsPlacing((currentValue) => !currentValue)
-              }}
+              onClick={() => startPlacementMode('text')}
             >
-              {isPlacing ? 'Cancel placement' : 'Add annotation'}
+              {placementMode === 'text' ? 'Cancel text' : 'Add annotation'}
+            </button>
+            <button
+              className={`floating-action-button subtle ${
+                placementMode === 'drawing' ? 'is-editing' : ''
+              }`.trim()}
+              type="button"
+              onClick={() => startPlacementMode('drawing')}
+            >
+              {placementMode === 'drawing' ? 'Cancel drawing' : 'Add drawing'}
             </button>
             <button
               className={`floating-action-button subtle ${
@@ -404,7 +544,7 @@ export function FloatingNotes() {
               className="floating-action-button subtle"
               type="button"
               onClick={clearAllNotes}
-              disabled={notes.length === 0 && !draftNote}
+              disabled={notes.length === 0 && !draftTextNote && !draftDrawingNote}
             >
               Clear all
             </button>
@@ -424,7 +564,7 @@ export function FloatingNotes() {
                   <span className="annotation-sidebar-time">
                     {formatCreatedAt(note.createdAt)}
                   </span>
-                  <strong>{buildNotePreview(note.text)}</strong>
+                  <strong>{buildNotePreview(note)}</strong>
                 </button>
               ))}
             </div>
@@ -434,20 +574,22 @@ export function FloatingNotes() {
 
           {isEditingPositions ? (
             <p className="annotation-sidebar-empty">
-              Drag any note on the page to reposition it.
+              Drag any note or drawing on the page to reposition it.
             </p>
           ) : null}
         </div>
       </aside>
 
-      {isPlacing ? (
+      {placementMode ? (
         <div
           className="floating-notes-placement-layer"
           onClick={handlePlacementClick}
           role="presentation"
         >
           <div className="floating-placement-hint">
-            Click anywhere on the page to place text there.
+            {placementMode === 'text'
+              ? 'Click anywhere on the page to place text there.'
+              : 'Click anywhere on the page to place a drawing there.'}
           </div>
         </div>
       ) : null}
@@ -455,9 +597,9 @@ export function FloatingNotes() {
       <div className="floating-notes-layer">
         {notes.map((note) => (
           <article
-            className={`floating-note ${highlightedNoteId === note.id ? 'is-highlighted' : ''} ${
-              isEditingPositions ? 'is-editing' : ''
-            }`.trim()}
+            className={`floating-note floating-note-${note.type} ${
+              highlightedNoteId === note.id ? 'is-highlighted' : ''
+            } ${isEditingPositions ? 'is-editing' : ''}`.trim()}
             id={`annotation-${note.id}`}
             key={note.id}
             onPointerDown={(event) => startDraggingNote(event, note.id)}
@@ -472,23 +614,31 @@ export function FloatingNotes() {
             >
               ×
             </button>
-            <p>{note.text}</p>
+            {note.type === 'drawing' && note.drawingUrl ? (
+              <img
+                alt="Annotation drawing"
+                className="floating-note-drawing-image"
+                src={note.drawingUrl}
+              />
+            ) : (
+              <p>{note.text}</p>
+            )}
             <span className="floating-note-time">{formatCreatedAt(note.createdAt)}</span>
           </article>
         ))}
 
-        {draftNote ? (
+        {draftTextNote ? (
           <div
             className="floating-note draft"
-            style={{ left: `${draftNote.xPercent}%`, top: `${draftNote.yOffset}px` }}
+            style={{ left: `${draftTextNote.xPercent}%`, top: `${draftTextNote.yOffset}px` }}
           >
             <textarea
               autoFocus
               rows={4}
               placeholder="Write text for this spot."
-              value={draftNote.text}
+              value={draftTextNote.text}
               onChange={(event) =>
-                setDraftNote((currentDraft) =>
+                setDraftTextNote((currentDraft) =>
                   currentDraft
                     ? {
                         ...currentDraft,
@@ -502,16 +652,57 @@ export function FloatingNotes() {
               <button
                 className="floating-action-button subtle"
                 type="button"
-                onClick={() => setDraftNote(null)}
+                onClick={() => setDraftTextNote(null)}
               >
                 Cancel
               </button>
               <button
                 className="floating-action-button"
                 type="button"
-                onClick={saveDraftNote}
+                onClick={saveDraftTextNote}
               >
                 Save text
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        {draftDrawingNote ? (
+          <div
+            className="floating-note floating-note-drawing draft"
+            style={{ left: `${draftDrawingNote.xPercent}%`, top: `${draftDrawingNote.yOffset}px` }}
+          >
+            <canvas
+              ref={drawingCanvasRef}
+              className="floating-note-drawing-canvas"
+              height={DRAWING_HEIGHT}
+              onPointerDown={handleDrawingPointerDown}
+              onPointerLeave={stopDrawing}
+              onPointerMove={handleDrawingPointerMove}
+              onPointerUp={stopDrawing}
+              width={DRAWING_WIDTH}
+            />
+            <div className="floating-note-draft-actions">
+              <button
+                className="floating-action-button subtle"
+                type="button"
+                onClick={() => setDraftDrawingNote(null)}
+              >
+                Cancel
+              </button>
+              <button
+                className="floating-action-button subtle"
+                type="button"
+                onClick={clearDraftDrawing}
+              >
+                Clear
+              </button>
+              <button
+                className="floating-action-button"
+                type="button"
+                onClick={saveDraftDrawingNote}
+              >
+                Save drawing
               </button>
             </div>
           </div>

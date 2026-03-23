@@ -431,6 +431,26 @@ a {
   width: min(320px, calc(100% - 24px));
 }
 
+.floating-note-drawing {
+  padding: 8px 28px 8px 8px;
+}
+
+.floating-note-drawing-image,
+.floating-note-drawing-canvas {
+  display: block;
+  width: 220px;
+  max-width: min(220px, calc(100vw - 72px));
+  height: auto;
+  border-radius: 8px;
+  background: rgba(255, 251, 242, 0.9);
+}
+
+.floating-note-drawing-canvas {
+  touch-action: none;
+  cursor: crosshair;
+  border: 1px dashed rgba(90, 66, 16, 0.18);
+}
+
 .floating-note textarea {
   width: 100%;
   resize: vertical;

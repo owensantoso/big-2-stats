@@ -14,6 +14,12 @@ type DraftNote = {
   text: string
 } | null
 
+type DragState = {
+  id: string
+  pointerOffsetX: number
+  pointerOffsetY: number
+} | null
+
 const STORAGE_KEY = 'big-2-stats-floating-notes'
 const CLEAR_ALL_PASSWORD = 'omegalul'
 
@@ -110,10 +116,12 @@ function buildNotePreview(value: string): string {
 export function FloatingNotes() {
   const [notes, setNotes] = useState<FloatingNote[]>(() => loadNotes())
   const [isPlacing, setIsPlacing] = useState(false)
+  const [isEditingPositions, setIsEditingPositions] = useState(false)
   const [draftNote, setDraftNote] = useState<DraftNote>(null)
   const [isCollapsed, setIsCollapsed] = useState(true)
   const [showWrongPassword, setShowWrongPassword] = useState(false)
   const [highlightedNoteId, setHighlightedNoteId] = useState<string | null>(null)
+  const [dragState, setDragState] = useState<DragState>(null)
 
   useEffect(() => {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(notes))
@@ -133,6 +141,55 @@ export function FloatingNotes() {
     }
   }, [highlightedNoteId])
 
+  useEffect(() => {
+    if (!dragState) {
+      return
+    }
+
+    const handlePointerMove = (event: PointerEvent) => {
+      const canvasElement = document.querySelector('.page-canvas')
+
+      if (!(canvasElement instanceof HTMLElement)) {
+        return
+      }
+
+      const bounds = canvasElement.getBoundingClientRect()
+      const nextXPercent = clamp(
+        ((event.clientX - bounds.left - dragState.pointerOffsetX) / bounds.width) * 100,
+        1,
+        76,
+      )
+      const nextYOffset = Math.max(
+        event.clientY - bounds.top - dragState.pointerOffsetY,
+        0,
+      )
+
+      setNotes((currentNotes) =>
+        currentNotes.map((note) =>
+          note.id === dragState.id
+            ? {
+                ...note,
+                xPercent: nextXPercent,
+                yOffset: nextYOffset,
+              }
+            : note,
+        ),
+      )
+    }
+
+    const stopDragging = () => {
+      setDragState(null)
+    }
+
+    window.addEventListener('pointermove', handlePointerMove)
+    window.addEventListener('pointerup', stopDragging)
+
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove)
+      window.removeEventListener('pointerup', stopDragging)
+    }
+  }, [dragState])
+
   const noteCountLabel = useMemo(() => {
     if (notes.length === 1) {
       return '1 annotation'
@@ -148,7 +205,7 @@ export function FloatingNotes() {
   }, [notes])
 
   const handlePlacementClick = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (draftNote) {
+    if (draftNote || isEditingPositions) {
       return
     }
 
@@ -220,6 +277,47 @@ export function FloatingNotes() {
     }
   }
 
+  const toggleEditPositionsMode = () => {
+    if (isEditingPositions) {
+      setIsEditingPositions(false)
+      setDragState(null)
+      return
+    }
+
+    const enteredPassword = window.prompt(
+      'Enter the annotation edit password to move annotations:',
+    )
+
+    if (enteredPassword !== CLEAR_ALL_PASSWORD) {
+      setShowWrongPassword(true)
+      return
+    }
+
+    setDraftNote(null)
+    setIsPlacing(false)
+    setIsEditingPositions(true)
+  }
+
+  const startDraggingNote = (
+    event: React.PointerEvent<HTMLElement>,
+    noteId: string,
+  ) => {
+    if (!isEditingPositions) {
+      return
+    }
+
+    const noteElement = event.currentTarget
+    const bounds = noteElement.getBoundingClientRect()
+
+    event.preventDefault()
+    setHighlightedNoteId(noteId)
+    setDragState({
+      id: noteId,
+      pointerOffsetX: event.clientX - bounds.left,
+      pointerOffsetY: event.clientY - bounds.top,
+    })
+  }
+
   const clearAllNotes = () => {
     const enteredPassword = window.prompt(
       'Enter the annotation clear password to remove all annotations:',
@@ -282,11 +380,23 @@ export function FloatingNotes() {
               className={`floating-action-button ${isPlacing ? 'active' : ''}`.trim()}
               type="button"
               onClick={() => {
+                setIsEditingPositions(false)
+                setDragState(null)
                 setDraftNote(null)
                 setIsPlacing((currentValue) => !currentValue)
               }}
             >
               {isPlacing ? 'Cancel placement' : 'Add annotation'}
+            </button>
+            <button
+              className={`floating-action-button subtle ${
+                isEditingPositions ? 'is-editing' : ''
+              }`.trim()}
+              type="button"
+              onClick={toggleEditPositionsMode}
+              disabled={notes.length === 0}
+            >
+              {isEditingPositions ? 'Done moving' : 'Edit positions'}
             </button>
             <button
               className="floating-action-button subtle"
@@ -319,6 +429,12 @@ export function FloatingNotes() {
           ) : (
             <p className="annotation-sidebar-empty">No annotations yet.</p>
           )}
+
+          {isEditingPositions ? (
+            <p className="annotation-sidebar-empty">
+              Drag any note on the page to reposition it.
+            </p>
+          ) : null}
         </div>
       </aside>
 
@@ -337,9 +453,12 @@ export function FloatingNotes() {
       <div className="floating-notes-layer">
         {notes.map((note) => (
           <article
-            className={`floating-note ${highlightedNoteId === note.id ? 'is-highlighted' : ''}`.trim()}
+            className={`floating-note ${highlightedNoteId === note.id ? 'is-highlighted' : ''} ${
+              isEditingPositions ? 'is-editing' : ''
+            }`.trim()}
             id={`annotation-${note.id}`}
             key={note.id}
+            onPointerDown={(event) => startDraggingNote(event, note.id)}
             style={{ left: `${note.xPercent}%`, top: `${note.yOffset}px` }}
             tabIndex={-1}
           >

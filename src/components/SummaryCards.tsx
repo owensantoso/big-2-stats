@@ -15,6 +15,11 @@ type SummaryCardsProps = {
       owen: number
       fiona: number
     }
+    sessionOutcomes: {
+      owen: number
+      draws: number
+      fiona: number
+    }
     latestSession: SessionRow | null
   }
 }
@@ -60,6 +65,11 @@ export function SummaryCards({ stats }: SummaryCardsProps) {
         value={stats.leader.leader}
         caption={leaderCaption}
         accentClassName={leaderAccentClassName}
+      />
+      <StatCard
+        title="Session Record"
+        value={`${stats.sessionOutcomes.owen}-${stats.sessionOutcomes.draws}-${stats.sessionOutcomes.fiona}`}
+        caption="Owen wins - Draws - Fiona wins"
       />
     </section>
   )

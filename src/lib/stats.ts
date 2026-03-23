@@ -11,6 +11,12 @@ type LeaderSummary = {
   margin: number
 }
 
+type SessionOutcomeSummary = {
+  owen: number
+  draws: number
+  fiona: number
+}
+
 export function getTotalOwenWins(rows: SessionRow[]): number {
   return rows.reduce((sum, row) => sum + row.owenWins, 0)
 }
@@ -59,6 +65,25 @@ export function getAverageWinsPerSession(rows: SessionRow[]) {
     owen: getTotalOwenWins(rows) / rows.length,
     fiona: getTotalFionaWins(rows) / rows.length,
   }
+}
+
+export function getSessionOutcomeSummary(rows: SessionRow[]): SessionOutcomeSummary {
+  return rows.reduce<SessionOutcomeSummary>(
+    (summary, row) => {
+      const winner = getSessionWinner(row)
+
+      if (winner === 'Owen') {
+        summary.owen += 1
+      } else if (winner === 'Fiona') {
+        summary.fiona += 1
+      } else {
+        summary.draws += 1
+      }
+
+      return summary
+    },
+    { owen: 0, draws: 0, fiona: 0 },
+  )
 }
 
 function compareSessionsByDate(a: SessionRow, b: SessionRow): number {
@@ -140,6 +165,7 @@ export function buildDashboardStats(rows: SessionRow[]) {
   const totalSessions = getTotalSessions(rows)
   const leader = getLeader(rows)
   const averageWins = getAverageWinsPerSession(rows)
+  const sessionOutcomes = getSessionOutcomeSummary(rows)
   const latestSession = getLatestSession(rows)
 
   return {
@@ -148,6 +174,7 @@ export function buildDashboardStats(rows: SessionRow[]) {
     totalSessions,
     leader,
     averageWins,
+    sessionOutcomes,
     latestSession,
     cumulativeWinsSeries: getCumulativeWinsSeries(rows),
     winsByLocation: getWinsByLocation(rows),

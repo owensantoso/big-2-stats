@@ -258,15 +258,30 @@ function serializeNoteForApi(note: FloatingNote) {
 }
 
 async function fetchRemoteNotes(): Promise<FloatingNote[]> {
-  const response = await fetch(ANNOTATIONS_API_URL, {
-    method: 'GET',
+  const callbackName = `big2AnnotationsCallback_${Date.now()}_${Math.random()
+    .toString(36)
+    .slice(2, 8)}`
+  const payload = await new Promise<unknown>((resolve, reject) => {
+    const script = document.createElement('script')
+    const callbackRegistry = window as unknown as Record<string, unknown>
+    const cleanup = () => {
+      delete callbackRegistry[callbackName]
+      script.remove()
+    }
+
+    callbackRegistry[callbackName] = (data: unknown) => {
+      cleanup()
+      resolve(data)
+    }
+
+    script.onerror = () => {
+      cleanup()
+      reject(new Error('Shared annotations could not load from Apps Script.'))
+    }
+
+    script.src = `${ANNOTATIONS_API_URL}?callback=${encodeURIComponent(callbackName)}`
+    document.body.appendChild(script)
   })
-
-  if (!response.ok) {
-    throw new Error(`Annotations request failed with ${response.status}.`)
-  }
-
-  const payload = (await response.json()) as unknown
 
   if (!Array.isArray(payload)) {
     throw new Error('Annotations response was not a list.')
@@ -282,20 +297,54 @@ async function fetchRemoteNotes(): Promise<FloatingNote[]> {
   })
 }
 
-async function postAnnotationsAction<T>(body: Record<string, unknown>): Promise<T> {
-  const response = await fetch(ANNOTATIONS_API_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'text/plain;charset=utf-8',
-    },
-    body: JSON.stringify(body),
+async function postAnnotationsAction(body: Record<string, unknown>): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const iframe = document.createElement('iframe')
+    const form = document.createElement('form')
+    const targetName = `big2AnnotationsTarget_${Date.now()}_${Math.random()
+      .toString(36)
+      .slice(2, 8)}`
+    const timeoutId = window.setTimeout(() => {
+      cleanup()
+      reject(new Error('Shared annotations request timed out.'))
+    }, 6000)
+
+    const cleanup = () => {
+      window.clearTimeout(timeoutId)
+      iframe.remove()
+      form.remove()
+    }
+
+    iframe.name = targetName
+    iframe.hidden = true
+    form.method = 'POST'
+    form.action = ANNOTATIONS_API_URL
+    form.target = targetName
+    form.hidden = true
+
+    const actionInput = document.createElement('input')
+    actionInput.type = 'hidden'
+    actionInput.name = 'action'
+    actionInput.value = typeof body.action === 'string' ? body.action : ''
+
+    const payloadInput = document.createElement('input')
+    payloadInput.type = 'hidden'
+    payloadInput.name = 'payload'
+    payloadInput.value = JSON.stringify(body)
+
+    form.append(actionInput, payloadInput)
+    iframe.addEventListener(
+      'load',
+      () => {
+        cleanup()
+        resolve()
+      },
+      { once: true },
+    )
+
+    document.body.append(iframe, form)
+    form.submit()
   })
-
-  if (!response.ok) {
-    throw new Error(`Annotations update failed with ${response.status}.`)
-  }
-
-  return (await response.json()) as T
 }
 
 function loadNotes(): FloatingNote[] {
@@ -566,7 +615,7 @@ export function FloatingNotes() {
             currentNotes.map((note) => (note.id === updatedNote.id ? updatedNote : note)),
           )
 
-          void postAnnotationsAction<{ ok?: boolean; error?: string }>({
+          void postAnnotationsAction({
             action: 'update',
             annotation: serializeNoteForApi(updatedNote),
           }).catch(() => {
@@ -675,7 +724,7 @@ export function FloatingNotes() {
     setDraftTextNote(null)
 
     try {
-      await postAnnotationsAction<{ ok?: boolean; error?: string }>({
+      await postAnnotationsAction({
         action: 'create',
         annotation: serializeNoteForApi(nextNote),
       })
@@ -715,7 +764,7 @@ export function FloatingNotes() {
     setDraftDrawingNote(null)
 
     try {
-      await postAnnotationsAction<{ ok?: boolean; error?: string }>({
+      await postAnnotationsAction({
         action: 'create',
         annotation: serializeNoteForApi(nextNote),
       })
@@ -781,7 +830,7 @@ export function FloatingNotes() {
       setNotes((currentNotes) => [...currentNotes, nextNote])
       setDraftImageNote(null)
 
-      await postAnnotationsAction<{ ok?: boolean; error?: string }>({
+      await postAnnotationsAction({
         action: 'create',
         annotation: serializeNoteForApi(nextNote),
       })
@@ -834,7 +883,7 @@ export function FloatingNotes() {
     }
 
     try {
-      await postAnnotationsAction<{ ok?: boolean; error?: string }>({
+      await postAnnotationsAction({
         action: 'delete',
         id,
       })
@@ -923,7 +972,7 @@ export function FloatingNotes() {
     setHighlightedNoteId(null)
 
     try {
-      await postAnnotationsAction<{ ok?: boolean; error?: string }>({
+      await postAnnotationsAction({
         action: 'clear',
       })
       setLoadError(null)

@@ -462,6 +462,21 @@ a {
   color: inherit;
 }
 
+.floating-note-drag-handle {
+  margin: -2px 0 8px;
+  color: var(--ink-soft);
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: grab;
+  user-select: none;
+}
+
+.floating-note-drag-handle:active {
+  cursor: grabbing;
+}
+
 .floating-note-delete {
   position: absolute;
   top: 6px;

@@ -24,7 +24,8 @@ type DraftDrawingNote = {
 } | null
 
 type DragState = {
-  id: string
+  kind: 'saved-note' | 'draft-text' | 'draft-drawing'
+  id?: string
   pointerOffsetX: number
   pointerOffsetY: number
 } | null
@@ -212,16 +213,42 @@ export function FloatingNotes() {
       )
 
       setNotes((currentNotes) =>
-        currentNotes.map((note) =>
-          note.id === dragState.id
+        dragState.kind === 'saved-note'
+          ? currentNotes.map((note) =>
+              note.id === dragState.id
+                ? {
+                    ...note,
+                    xPercent: nextXPercent,
+                    yOffset: nextYOffset,
+                  }
+                : note,
+            )
+          : currentNotes,
+      )
+
+      if (dragState.kind === 'draft-text') {
+        setDraftTextNote((currentDraft) =>
+          currentDraft
             ? {
-                ...note,
+                ...currentDraft,
                 xPercent: nextXPercent,
                 yOffset: nextYOffset,
               }
-            : note,
-        ),
-      )
+            : null,
+        )
+      }
+
+      if (dragState.kind === 'draft-drawing') {
+        setDraftDrawingNote((currentDraft) =>
+          currentDraft
+            ? {
+                ...currentDraft,
+                xPercent: nextXPercent,
+                yOffset: nextYOffset,
+              }
+            : null,
+        )
+      }
     }
 
     const stopDragging = () => {
@@ -406,8 +433,29 @@ export function FloatingNotes() {
 
     event.preventDefault()
     setHighlightedNoteId(noteId)
-    setDragState({
+      setDragState({
+      kind: 'saved-note',
       id: noteId,
+      pointerOffsetX: event.clientX - bounds.left,
+      pointerOffsetY: event.clientY - bounds.top,
+    })
+  }
+
+  const startDraggingDraft = (
+    event: React.PointerEvent<HTMLElement>,
+    kind: 'draft-text' | 'draft-drawing',
+  ) => {
+    const element = event.currentTarget.parentElement
+
+    if (!(element instanceof HTMLElement)) {
+      return
+    }
+
+    const bounds = element.getBoundingClientRect()
+
+    event.preventDefault()
+    setDragState({
+      kind,
       pointerOffsetX: event.clientX - bounds.left,
       pointerOffsetY: event.clientY - bounds.top,
     })
@@ -632,6 +680,12 @@ export function FloatingNotes() {
             className="floating-note draft"
             style={{ left: `${draftTextNote.xPercent}%`, top: `${draftTextNote.yOffset}px` }}
           >
+            <div
+              className="floating-note-drag-handle"
+              onPointerDown={(event) => startDraggingDraft(event, 'draft-text')}
+            >
+              Drag to move
+            </div>
             <textarea
               autoFocus
               rows={4}
@@ -672,6 +726,12 @@ export function FloatingNotes() {
             className="floating-note floating-note-drawing draft"
             style={{ left: `${draftDrawingNote.xPercent}%`, top: `${draftDrawingNote.yOffset}px` }}
           >
+            <div
+              className="floating-note-drag-handle"
+              onPointerDown={(event) => startDraggingDraft(event, 'draft-drawing')}
+            >
+              Drag to move
+            </div>
             <canvas
               ref={drawingCanvasRef}
               className="floating-note-drawing-canvas"

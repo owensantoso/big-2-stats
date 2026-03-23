@@ -5,6 +5,7 @@ type FloatingNote = {
   text: string
   xPercent: number
   yOffset: number
+  createdAt: string
 }
 
 type DraftNote = {
@@ -28,6 +29,17 @@ function createNoteId(): string {
   return `note-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 }
 
+function toIsoStringOrNow(value: unknown): string {
+  if (typeof value === 'string') {
+    const parsed = new Date(value)
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed.toISOString()
+    }
+  }
+
+  return new Date().toISOString()
+}
+
 function loadNotes(): FloatingNote[] {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY)
@@ -41,24 +53,36 @@ function loadNotes(): FloatingNote[] {
     }
 
     return parsed.flatMap((note) => {
+      if (typeof note !== 'object' || note === null || !('id' in note) || !('text' in note)) {
+        return []
+      }
+
+      const maybeXPercent =
+        'xPercent' in note && typeof note.xPercent === 'number'
+          ? note.xPercent
+          : 'x' in note && typeof note.x === 'number'
+            ? note.x
+            : null
+      const maybeYOffset =
+        'yOffset' in note && typeof note.yOffset === 'number'
+          ? note.yOffset
+          : 'y' in note && typeof note.y === 'number'
+            ? note.y
+            : null
+
       if (
-        typeof note === 'object' &&
-        note !== null &&
-        'id' in note &&
-        'text' in note &&
-        'xPercent' in note &&
-        'yOffset' in note &&
         typeof note.id === 'string' &&
         typeof note.text === 'string' &&
-        typeof note.xPercent === 'number' &&
-        typeof note.yOffset === 'number'
+        maybeXPercent !== null &&
+        maybeYOffset !== null
       ) {
         return [
           {
             id: note.id,
             text: note.text,
-            xPercent: clamp(note.xPercent, 1, 76),
-            yOffset: Math.max(note.yOffset, 0),
+            xPercent: clamp(maybeXPercent, 1, 76),
+            yOffset: Math.max(maybeYOffset, 0),
+            createdAt: toIsoStringOrNow('createdAt' in note ? note.createdAt : null),
           },
         ]
       }
@@ -70,16 +94,44 @@ function loadNotes(): FloatingNote[] {
   }
 }
 
+function formatCreatedAt(value: string): string {
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(new Date(value))
+}
+
+function buildNotePreview(value: string): string {
+  return value.length > 52 ? `${value.slice(0, 52).trim()}...` : value
+}
+
 export function FloatingNotes() {
   const [notes, setNotes] = useState<FloatingNote[]>(() => loadNotes())
   const [isPlacing, setIsPlacing] = useState(false)
   const [draftNote, setDraftNote] = useState<DraftNote>(null)
   const [isCollapsed, setIsCollapsed] = useState(true)
   const [showWrongPassword, setShowWrongPassword] = useState(false)
+  const [highlightedNoteId, setHighlightedNoteId] = useState<string | null>(null)
 
   useEffect(() => {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(notes))
   }, [notes])
+
+  useEffect(() => {
+    if (!highlightedNoteId) {
+      return
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setHighlightedNoteId(null)
+    }, 1800)
+
+    return () => {
+      window.clearTimeout(timeoutId)
+    }
+  }, [highlightedNoteId])
 
   const noteCountLabel = useMemo(() => {
     if (notes.length === 1) {
@@ -88,6 +140,12 @@ export function FloatingNotes() {
 
     return `${notes.length} annotations`
   }, [notes.length])
+
+  const sortedNotes = useMemo(() => {
+    return [...notes].sort((a, b) => {
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    })
+  }, [notes])
 
   const handlePlacementClick = (event: React.MouseEvent<HTMLDivElement>) => {
     if (draftNote) {
@@ -125,9 +183,25 @@ export function FloatingNotes() {
         text,
         xPercent: draftNote.xPercent,
         yOffset: draftNote.yOffset,
+        createdAt: new Date().toISOString(),
       },
     ])
     setDraftNote(null)
+  }
+
+  const focusNote = (id: string) => {
+    const noteElement = document.getElementById(`annotation-${id}`)
+
+    if (!noteElement) {
+      return
+    }
+
+    setHighlightedNoteId(id)
+    noteElement.scrollIntoView({
+      behavior: 'smooth',
+      block: 'center',
+      inline: 'nearest',
+    })
   }
 
   const deleteNote = (id: string) => {
@@ -141,6 +215,9 @@ export function FloatingNotes() {
     }
 
     setNotes((currentNotes) => currentNotes.filter((note) => note.id !== id))
+    if (highlightedNoteId === id) {
+      setHighlightedNoteId(null)
+    }
   }
 
   const clearAllNotes = () => {
@@ -156,6 +233,7 @@ export function FloatingNotes() {
     setNotes([])
     setDraftNote(null)
     setIsPlacing(false)
+    setHighlightedNoteId(null)
   }
 
   return (
@@ -181,41 +259,68 @@ export function FloatingNotes() {
         </div>
       ) : null}
 
-      <div className="floating-notes-toolbar">
-        <div className="floating-notes-meta">
-          <strong>Page Annotations</strong>
-          <span>{noteCountLabel}</span>
-        </div>
-        <button
-          className="floating-action-button subtle"
-          type="button"
-          onClick={() => setIsCollapsed((currentValue) => !currentValue)}
-        >
-          {isCollapsed ? 'Open' : 'Hide'}
-        </button>
-        <div
-          className={`floating-notes-actions ${isCollapsed ? 'is-collapsed' : ''}`.trim()}
-        >
+      <aside className="annotation-panel" aria-label="Annotations panel">
+        <div className="annotation-panel-header">
+          <div className="floating-notes-meta">
+            <strong>Page Annotations</strong>
+            <span>{noteCountLabel}</span>
+          </div>
           <button
-            className={`floating-action-button ${isPlacing ? 'active' : ''}`.trim()}
+            className={`annotation-panel-toggle ${isCollapsed ? 'is-collapsed' : ''}`.trim()}
             type="button"
-            onClick={() => {
-              setDraftNote(null)
-              setIsPlacing((currentValue) => !currentValue)
-            }}
+            aria-expanded={!isCollapsed}
+            aria-label={isCollapsed ? 'Expand annotations panel' : 'Collapse annotations panel'}
+            onClick={() => setIsCollapsed((currentValue) => !currentValue)}
           >
-            {isPlacing ? 'Cancel placement' : 'Add annotation'}
-          </button>
-          <button
-            className="floating-action-button subtle"
-            type="button"
-            onClick={clearAllNotes}
-            disabled={notes.length === 0 && !draftNote}
-          >
-            Clear all
+            <span className="annotation-panel-toggle-chevron" aria-hidden="true" />
           </button>
         </div>
-      </div>
+
+        <div className={`annotation-panel-body ${isCollapsed ? 'is-collapsed' : ''}`.trim()}>
+          <div className="floating-notes-actions">
+            <button
+              className={`floating-action-button ${isPlacing ? 'active' : ''}`.trim()}
+              type="button"
+              onClick={() => {
+                setDraftNote(null)
+                setIsPlacing((currentValue) => !currentValue)
+              }}
+            >
+              {isPlacing ? 'Cancel placement' : 'Add annotation'}
+            </button>
+            <button
+              className="floating-action-button subtle"
+              type="button"
+              onClick={clearAllNotes}
+              disabled={notes.length === 0 && !draftNote}
+            >
+              Clear all
+            </button>
+          </div>
+
+          {sortedNotes.length > 0 ? (
+            <div className="annotation-sidebar-list">
+              {sortedNotes.map((note) => (
+                <button
+                  className={`annotation-sidebar-item ${
+                    highlightedNoteId === note.id ? 'is-active' : ''
+                  }`.trim()}
+                  key={note.id}
+                  type="button"
+                  onClick={() => focusNote(note.id)}
+                >
+                  <span className="annotation-sidebar-time">
+                    {formatCreatedAt(note.createdAt)}
+                  </span>
+                  <strong>{buildNotePreview(note.text)}</strong>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="annotation-sidebar-empty">No annotations yet.</p>
+          )}
+        </div>
+      </aside>
 
       {isPlacing ? (
         <div
@@ -229,12 +334,14 @@ export function FloatingNotes() {
         </div>
       ) : null}
 
-      <div className="floating-notes-layer" aria-hidden="true">
+      <div className="floating-notes-layer">
         {notes.map((note) => (
           <article
-            className="floating-note"
+            className={`floating-note ${highlightedNoteId === note.id ? 'is-highlighted' : ''}`.trim()}
+            id={`annotation-${note.id}`}
             key={note.id}
             style={{ left: `${note.xPercent}%`, top: `${note.yOffset}px` }}
+            tabIndex={-1}
           >
             <button
               className="floating-note-delete"
@@ -245,6 +352,7 @@ export function FloatingNotes() {
               ×
             </button>
             <p>{note.text}</p>
+            <span className="floating-note-time">{formatCreatedAt(note.createdAt)}</span>
           </article>
         ))}
 

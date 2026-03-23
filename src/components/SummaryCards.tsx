@@ -68,8 +68,31 @@ export function SummaryCards({ stats }: SummaryCardsProps) {
       />
       <StatCard
         title="Session Record"
-        value={`${stats.sessionOutcomes.owen}-${stats.sessionOutcomes.draws}-${stats.sessionOutcomes.fiona}`}
-        caption="Owen wins - Draws - Fiona wins"
+        value={
+          <span className="session-record-value" aria-label="Owen draws Fiona session record">
+            <span className="session-record-owen">{stats.sessionOutcomes.owen}</span>
+            <span className="session-record-separator">-</span>
+            <span className="session-record-draws">{stats.sessionOutcomes.draws}</span>
+            <span className="session-record-separator">-</span>
+            <span className="session-record-fiona">{stats.sessionOutcomes.fiona}</span>
+          </span>
+        }
+        caption={
+          <span className="session-record-legend" aria-label="Legend for Owen wins, draws, and Fiona wins">
+            <span className="session-record-legend-item">
+              <span className="session-record-dot session-record-dot-owen" aria-hidden="true" />
+              <span>Owen wins</span>
+            </span>
+            <span className="session-record-legend-item">
+              <span className="session-record-dot session-record-dot-draws" aria-hidden="true" />
+              <span>Draws</span>
+            </span>
+            <span className="session-record-legend-item">
+              <span className="session-record-dot session-record-dot-fiona" aria-hidden="true" />
+              <span>Fiona wins</span>
+            </span>
+          </span>
+        }
       />
     </section>
   )

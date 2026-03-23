@@ -20,13 +20,13 @@ export function LocationBreakdownChart({ rows }: LocationBreakdownChartProps) {
               {
                 label: 'Owen',
                 data: rows.map((row) => row.owenWins),
-                backgroundColor: '#1d6fdc',
+                backgroundColor: '#4d78b7',
                 borderRadius: 8,
               },
               {
                 label: 'Fiona',
                 data: rows.map((row) => row.fionaWins),
-                backgroundColor: '#d65445',
+                backgroundColor: '#c96a5c',
                 borderRadius: 8,
               },
             ],
@@ -34,8 +34,15 @@ export function LocationBreakdownChart({ rows }: LocationBreakdownChartProps) {
           options={{
             indexAxis: 'y',
             maintainAspectRatio: false,
+            interaction: {
+              mode: 'index',
+              intersect: false,
+            },
             plugins: {
               legend: { position: 'bottom' },
+              tooltip: {
+                enabled: false,
+              },
             },
             scales: {
               x: {

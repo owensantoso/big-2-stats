@@ -1,7 +1,9 @@
+import type { ReactNode } from 'react'
+
 type StatCardProps = {
   title: string
-  value: string
-  caption?: string
+  value: ReactNode
+  caption?: ReactNode
   accentClassName?: string
 }
 

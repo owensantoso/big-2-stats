@@ -23,21 +23,28 @@ export function SessionWinsChart({ sessions }: SessionWinsChartProps) {
               {
                 label: 'Owen',
                 data: sessions.map((session) => session.owenWins),
-                backgroundColor: '#1d6fdc',
+                backgroundColor: '#4d78b7',
                 borderRadius: 8,
               },
               {
                 label: 'Fiona',
                 data: sessions.map((session) => session.fionaWins),
-                backgroundColor: '#d65445',
+                backgroundColor: '#c96a5c',
                 borderRadius: 8,
               },
             ],
           }}
           options={{
             maintainAspectRatio: false,
+            interaction: {
+              mode: 'index',
+              intersect: false,
+            },
             plugins: {
               legend: { position: 'bottom' },
+              tooltip: {
+                enabled: false,
+              },
             },
             scales: {
               y: {

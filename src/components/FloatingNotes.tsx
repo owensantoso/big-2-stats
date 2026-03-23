@@ -75,6 +75,7 @@ export function FloatingNotes() {
   const [isPlacing, setIsPlacing] = useState(false)
   const [draftNote, setDraftNote] = useState<DraftNote>(null)
   const [isCollapsed, setIsCollapsed] = useState(true)
+  const [showWrongPassword, setShowWrongPassword] = useState(false)
 
   useEffect(() => {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(notes))
@@ -135,6 +136,7 @@ export function FloatingNotes() {
     )
 
     if (enteredPassword !== CLEAR_ALL_PASSWORD) {
+      setShowWrongPassword(true)
       return
     }
 
@@ -147,6 +149,7 @@ export function FloatingNotes() {
     )
 
     if (enteredPassword !== CLEAR_ALL_PASSWORD) {
+      setShowWrongPassword(true)
       return
     }
 
@@ -157,6 +160,27 @@ export function FloatingNotes() {
 
   return (
     <>
+      {showWrongPassword ? (
+        <div
+          className="wrong-password-overlay"
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby="wrong-password-title"
+        >
+          <div className="wrong-password-modal">
+            <p className="wrong-password-kicker">Access denied</p>
+            <h2 id="wrong-password-title">WRONG PASSWORD OMEGALUL</h2>
+            <button
+              className="floating-action-button"
+              type="button"
+              onClick={() => setShowWrongPassword(false)}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       <div className="floating-notes-toolbar">
         <div className="floating-notes-meta">
           <strong>Page Annotations</strong>

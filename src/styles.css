@@ -451,6 +451,45 @@ a {
   border: 1px dashed rgba(90, 66, 16, 0.18);
 }
 
+.floating-note-image,
+.floating-note-image-placeholder {
+  display: block;
+  width: 220px;
+  max-width: min(220px, calc(100vw - 72px));
+  border-radius: 8px;
+}
+
+.floating-note-image {
+  height: auto;
+  background: rgba(255, 251, 242, 0.9);
+}
+
+.floating-note-image-placeholder {
+  padding: 16px 14px;
+  border: 1px dashed rgba(90, 66, 16, 0.18);
+  background: rgba(255, 251, 242, 0.72);
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
+.floating-note-upload-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  margin-bottom: 10px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(22, 50, 79, 0.08);
+  color: #17385f;
+  cursor: pointer;
+}
+
+.floating-note-file-input {
+  display: none;
+}
+
 .floating-note textarea {
   width: 100%;
   resize: vertical;

@@ -2,9 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 
 type FloatingNote = {
   id: string
-  type: 'text' | 'drawing'
+  type: 'text' | 'drawing' | 'image'
   text: string
   drawingUrl: string | null
+  imageUrl: string | null
   xPercent: number
   yOffset: number
   createdAt: string
@@ -23,8 +24,17 @@ type DraftDrawingNote = {
   yOffset: number
 } | null
 
+type DraftImageNote = {
+  type: 'image'
+  xPercent: number
+  yOffset: number
+  file: File | null
+  previewUrl: string | null
+  isUploading: boolean
+} | null
+
 type DragState = {
-  kind: 'saved-note' | 'draft-text' | 'draft-drawing'
+  kind: 'saved-note' | 'draft-text' | 'draft-drawing' | 'draft-image'
   id?: string
   pointerOffsetX: number
   pointerOffsetY: number
@@ -36,6 +46,9 @@ const MIN_X_PERCENT = 1
 const MAX_X_PERCENT = 92
 const DRAWING_WIDTH = 220
 const DRAWING_HEIGHT = 120
+const IMAGE_MAX_DIMENSION = 256
+const IMAGE_DEEP_FRY_PASSES = 5
+const IMAGE_JPEG_QUALITY = 0.12
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max)
@@ -47,6 +60,124 @@ function createNoteId(): string {
   }
 
   return `note-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+function readFileAsDataUrl(file: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        resolve(reader.result)
+        return
+      }
+
+      reject(new Error('Could not read the selected image file.'))
+    }
+
+    reader.onerror = () => reject(new Error('Could not read the selected image file.'))
+    reader.readAsDataURL(file)
+  })
+}
+
+function loadImageElement(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const image = new Image()
+    image.onload = () => resolve(image)
+    image.onerror = () => reject(new Error('Could not load the selected image.'))
+    image.src = src
+  })
+}
+
+function canvasToBlob(
+  canvas: HTMLCanvasElement,
+  type: string,
+  quality?: number,
+): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob) {
+        resolve(blob)
+        return
+      }
+
+      reject(new Error('Could not encode the image for upload.'))
+    }, type, quality)
+  })
+}
+
+async function deepFryImageFile(file: File): Promise<Blob> {
+  const sourceDataUrl = await readFileAsDataUrl(file)
+  let sourceImage = await loadImageElement(sourceDataUrl)
+
+  const scale = Math.min(
+    1,
+    IMAGE_MAX_DIMENSION / Math.max(sourceImage.width, sourceImage.height),
+  )
+  const width = Math.max(1, Math.round(sourceImage.width * scale))
+  const height = Math.max(1, Math.round(sourceImage.height * scale))
+  const canvas = document.createElement('canvas')
+  const context = canvas.getContext('2d')
+
+  if (!context) {
+    throw new Error('Could not initialize image compression.')
+  }
+
+  canvas.width = width
+  canvas.height = height
+
+  for (let pass = 0; pass < IMAGE_DEEP_FRY_PASSES; pass += 1) {
+    context.fillStyle = '#fff7ef'
+    context.fillRect(0, 0, width, height)
+    context.drawImage(sourceImage, 0, 0, width, height)
+
+    const compressedBlob = await canvasToBlob(canvas, 'image/jpeg', IMAGE_JPEG_QUALITY)
+    const compressedUrl = await readFileAsDataUrl(compressedBlob)
+    sourceImage = await loadImageElement(compressedUrl)
+  }
+
+  context.fillStyle = '#fff7ef'
+  context.fillRect(0, 0, width, height)
+  context.drawImage(sourceImage, 0, 0, width, height)
+
+  return canvasToBlob(canvas, 'image/jpeg', IMAGE_JPEG_QUALITY)
+}
+
+async function uploadImageToCloudinary(file: File): Promise<string> {
+  const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME?.trim()
+  const uploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET?.trim()
+
+  if (!cloudName || !uploadPreset) {
+    throw new Error(
+      'Missing Cloudinary config. Set VITE_CLOUDINARY_CLOUD_NAME and VITE_CLOUDINARY_UPLOAD_PRESET.',
+    )
+  }
+
+  const compressedBlob = await deepFryImageFile(file)
+  const formData = new FormData()
+  formData.append(
+    'file',
+    compressedBlob,
+    `${file.name.replace(/\.[^.]+$/, '') || 'annotation'}-deepfried.jpg`,
+  )
+  formData.append('upload_preset', uploadPreset)
+
+  const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+    method: 'POST',
+    body: formData,
+  })
+
+  if (!response.ok) {
+    throw new Error(`Cloudinary upload failed with ${response.status}.`)
+  }
+
+  const payload = (await response.json()) as { secure_url?: unknown }
+
+  if (typeof payload.secure_url !== 'string') {
+    throw new Error('Cloudinary upload did not return a usable image URL.')
+  }
+
+  return payload.secure_url
 }
 
 function toIsoStringOrNow(value: unknown): string {
@@ -94,12 +225,16 @@ function loadNotes(): FloatingNote[] {
         'drawingUrl' in note && typeof note.drawingUrl === 'string'
           ? note.drawingUrl
           : null
+      const imageUrl =
+        'imageUrl' in note && typeof note.imageUrl === 'string'
+          ? note.imageUrl
+          : null
 
       if (
         typeof note.id === 'string' &&
         maybeXPercent !== null &&
         maybeYOffset !== null &&
-        (text.trim().length > 0 || drawingUrl)
+        (text.trim().length > 0 || drawingUrl || imageUrl)
       ) {
         return [
           {
@@ -107,11 +242,16 @@ function loadNotes(): FloatingNote[] {
             type:
               'type' in note && note.type === 'drawing'
                 ? 'drawing'
+                : 'type' in note && note.type === 'image'
+                  ? 'image'
+                  : imageUrl
+                    ? 'image'
                 : drawingUrl && text.trim().length === 0
                   ? 'drawing'
                   : 'text',
             text,
             drawingUrl,
+            imageUrl,
             xPercent: clamp(maybeXPercent, MIN_X_PERCENT, MAX_X_PERCENT),
             yOffset: Math.max(maybeYOffset, 0),
             createdAt: toIsoStringOrNow('createdAt' in note ? note.createdAt : null),
@@ -140,6 +280,10 @@ function buildNotePreview(note: FloatingNote): string {
     return 'Drawing annotation'
   }
 
+  if (note.type === 'image') {
+    return 'Image annotation'
+  }
+
   return note.text.length > 52 ? `${note.text.slice(0, 52).trim()}...` : note.text
 }
 
@@ -160,10 +304,11 @@ function initializeDrawingCanvas(canvas: HTMLCanvasElement) {
 
 export function FloatingNotes() {
   const [notes, setNotes] = useState<FloatingNote[]>(() => loadNotes())
-  const [placementMode, setPlacementMode] = useState<'text' | 'drawing' | null>(null)
+  const [placementMode, setPlacementMode] = useState<'text' | 'drawing' | 'image' | null>(null)
   const [isEditingPositions, setIsEditingPositions] = useState(false)
   const [draftTextNote, setDraftTextNote] = useState<DraftTextNote>(null)
   const [draftDrawingNote, setDraftDrawingNote] = useState<DraftDrawingNote>(null)
+  const [draftImageNote, setDraftImageNote] = useState<DraftImageNote>(null)
   const [isCollapsed, setIsCollapsed] = useState(true)
   const [showWrongPassword, setShowWrongPassword] = useState(false)
   const [highlightedNoteId, setHighlightedNoteId] = useState<string | null>(null)
@@ -249,6 +394,18 @@ export function FloatingNotes() {
             : null,
         )
       }
+
+      if (dragState.kind === 'draft-image') {
+        setDraftImageNote((currentDraft) =>
+          currentDraft
+            ? {
+                ...currentDraft,
+                xPercent: nextXPercent,
+                yOffset: nextYOffset,
+              }
+            : null,
+        )
+      }
     }
 
     const stopDragging = () => {
@@ -289,11 +446,12 @@ export function FloatingNotes() {
   const resetDrafts = () => {
     setDraftTextNote(null)
     setDraftDrawingNote(null)
+    setDraftImageNote(null)
     setPlacementMode(null)
   }
 
   const handlePlacementClick = (event: React.MouseEvent<HTMLDivElement>) => {
-    if ((draftTextNote || draftDrawingNote) || isEditingPositions || !placementMode) {
+    if ((draftTextNote || draftDrawingNote || draftImageNote) || isEditingPositions || !placementMode) {
       return
     }
 
@@ -307,8 +465,17 @@ export function FloatingNotes() {
 
     if (placementMode === 'text') {
       setDraftTextNote({ type: 'text', xPercent, yOffset, text: '' })
-    } else {
+    } else if (placementMode === 'drawing') {
       setDraftDrawingNote({ type: 'drawing', xPercent, yOffset })
+    } else {
+      setDraftImageNote({
+        type: 'image',
+        xPercent,
+        yOffset,
+        file: null,
+        previewUrl: null,
+        isUploading: false,
+      })
     }
 
     setPlacementMode(null)
@@ -333,6 +500,7 @@ export function FloatingNotes() {
         type: 'text',
         text,
         drawingUrl: null,
+        imageUrl: null,
         xPercent: draftTextNote.xPercent,
         yOffset: draftTextNote.yOffset,
         createdAt: new Date().toISOString(),
@@ -361,12 +529,80 @@ export function FloatingNotes() {
         type: 'drawing',
         text: '',
         drawingUrl,
+        imageUrl: null,
         xPercent: draftDrawingNote.xPercent,
         yOffset: draftDrawingNote.yOffset,
         createdAt: new Date().toISOString(),
       },
     ])
     setDraftDrawingNote(null)
+  }
+
+  const handleDraftImageSelection = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const selectedFile = event.target.files?.[0] ?? null
+
+    if (!selectedFile) {
+      return
+    }
+
+    const previewUrl = await readFileAsDataUrl(selectedFile)
+
+    setDraftImageNote((currentDraft) =>
+      currentDraft
+        ? {
+            ...currentDraft,
+            file: selectedFile,
+            previewUrl,
+          }
+        : null,
+    )
+  }
+
+  const saveDraftImageNote = async () => {
+    if (!draftImageNote?.file) {
+      window.alert('Choose an image first.')
+      return
+    }
+
+    try {
+      setDraftImageNote((currentDraft) =>
+        currentDraft
+          ? {
+              ...currentDraft,
+              isUploading: true,
+            }
+          : null,
+      )
+
+      const imageUrl = await uploadImageToCloudinary(draftImageNote.file)
+
+      setNotes((currentNotes) => [
+        ...currentNotes,
+        {
+          id: createNoteId(),
+          type: 'image',
+          text: '',
+          drawingUrl: null,
+          imageUrl,
+          xPercent: draftImageNote.xPercent,
+          yOffset: draftImageNote.yOffset,
+          createdAt: new Date().toISOString(),
+        },
+      ])
+      setDraftImageNote(null)
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'Image upload failed.')
+      setDraftImageNote((currentDraft) =>
+        currentDraft
+          ? {
+              ...currentDraft,
+              isUploading: false,
+            }
+          : null,
+      )
+    }
   }
 
   const focusNote = (id: string) => {
@@ -443,7 +679,7 @@ export function FloatingNotes() {
 
   const startDraggingDraft = (
     event: React.PointerEvent<HTMLElement>,
-    kind: 'draft-text' | 'draft-drawing',
+    kind: 'draft-text' | 'draft-drawing' | 'draft-image',
   ) => {
     const element = event.currentTarget.parentElement
 
@@ -477,11 +713,12 @@ export function FloatingNotes() {
     setHighlightedNoteId(null)
   }
 
-  const startPlacementMode = (mode: 'text' | 'drawing') => {
+  const startPlacementMode = (mode: 'text' | 'drawing' | 'image') => {
     setIsEditingPositions(false)
     setDragState(null)
     setDraftTextNote(null)
     setDraftDrawingNote(null)
+    setDraftImageNote(null)
     setPlacementMode((currentMode) => (currentMode === mode ? null : mode))
   }
 
@@ -580,6 +817,15 @@ export function FloatingNotes() {
             </button>
             <button
               className={`floating-action-button subtle ${
+                placementMode === 'image' ? 'is-editing' : ''
+              }`.trim()}
+              type="button"
+              onClick={() => startPlacementMode('image')}
+            >
+              {placementMode === 'image' ? 'Cancel image' : 'Add image'}
+            </button>
+            <button
+              className={`floating-action-button subtle ${
                 isEditingPositions ? 'is-editing' : ''
               }`.trim()}
               type="button"
@@ -592,7 +838,7 @@ export function FloatingNotes() {
               className="floating-action-button subtle"
               type="button"
               onClick={clearAllNotes}
-              disabled={notes.length === 0 && !draftTextNote && !draftDrawingNote}
+              disabled={notes.length === 0 && !draftTextNote && !draftDrawingNote && !draftImageNote}
             >
               Clear all
             </button>
@@ -637,7 +883,9 @@ export function FloatingNotes() {
           <div className="floating-placement-hint">
             {placementMode === 'text'
               ? 'Click anywhere on the page to place text there.'
-              : 'Click anywhere on the page to place a drawing there.'}
+              : placementMode === 'drawing'
+                ? 'Click anywhere on the page to place a drawing there.'
+                : 'Click anywhere on the page to place an image there.'}
           </div>
         </div>
       ) : null}
@@ -667,6 +915,12 @@ export function FloatingNotes() {
                 alt="Annotation drawing"
                 className="floating-note-drawing-image"
                 src={note.drawingUrl}
+              />
+            ) : note.type === 'image' && note.imageUrl ? (
+              <img
+                alt="Annotation upload"
+                className="floating-note-image"
+                src={note.imageUrl}
               />
             ) : (
               <p>{note.text}</p>
@@ -763,6 +1017,57 @@ export function FloatingNotes() {
                 onClick={saveDraftDrawingNote}
               >
                 Save drawing
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        {draftImageNote ? (
+          <div
+            className="floating-note floating-note-image-note draft"
+            style={{ left: `${draftImageNote.xPercent}%`, top: `${draftImageNote.yOffset}px` }}
+          >
+            <div
+              className="floating-note-drag-handle"
+              onPointerDown={(event) => startDraggingDraft(event, 'draft-image')}
+            >
+              Drag to move
+            </div>
+            <label className="floating-note-upload-label">
+              <span>Select image</span>
+              <input
+                accept="image/*"
+                className="floating-note-file-input"
+                type="file"
+                onChange={(event) => void handleDraftImageSelection(event)}
+              />
+            </label>
+            {draftImageNote.previewUrl ? (
+              <img
+                alt="Draft annotation upload preview"
+                className="floating-note-image"
+                src={draftImageNote.previewUrl}
+              />
+            ) : (
+              <div className="floating-note-image-placeholder">
+                Tiny image will be resized to 256px max and deeply fried before upload.
+              </div>
+            )}
+            <div className="floating-note-draft-actions">
+              <button
+                className="floating-action-button subtle"
+                type="button"
+                onClick={() => setDraftImageNote(null)}
+              >
+                Cancel
+              </button>
+              <button
+                className="floating-action-button"
+                type="button"
+                disabled={!draftImageNote.file || draftImageNote.isUploading}
+                onClick={() => void saveDraftImageNote()}
+              >
+                {draftImageNote.isUploading ? 'Uploading...' : 'Save image'}
               </button>
             </div>
           </div>

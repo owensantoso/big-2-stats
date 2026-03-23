@@ -25,6 +25,12 @@ cp .env.example .env
 ```
 
 3. Set `VITE_SHEET_CSV_URL` to your published Google Sheets CSV URL.
+4. Set Cloudinary env vars if you want image annotations:
+
+```text
+VITE_CLOUDINARY_CLOUD_NAME=dssd1vgyz
+VITE_CLOUDINARY_UPLOAD_PRESET=big2stats
+```
 
 Example format:
 
@@ -32,7 +38,7 @@ Example format:
 https://docs.google.com/spreadsheets/d/e/EXAMPLE/pub?output=csv
 ```
 
-4. Start the app:
+5. Start the app:
 
 ```bash
 npm run dev
@@ -107,3 +113,5 @@ This app is static-only and can be deployed to GitHub Pages or Vercel.
 - No database
 - No auth
 - Google Sheets CSV is the source of truth
+- Image annotations upload directly from the browser to Cloudinary unsigned uploads
+- Annotation images are intentionally resized to `256px` max and aggressively JPEG-compressed client-side before upload

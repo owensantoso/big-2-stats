@@ -113,3 +113,7 @@ The workflow at `.github/workflows/deploy-pages.yml` will build `dist/` and depl
 - Google Sheets CSV is the source of truth
 - Image annotations upload directly from the browser to Cloudinary unsigned uploads
 - Annotation images are intentionally resized to `256px` max and aggressively JPEG-compressed client-side before upload
+
+## TODO
+
+- Update annotations so they are shared between users instead of local-only browser state

@@ -54,6 +54,169 @@ a {
   padding: 32px 20px 56px;
 }
 
+.page-canvas {
+  position: relative;
+}
+
+.floating-notes-toolbar {
+  position: fixed;
+  top: 18px;
+  right: 18px;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  border: 1px solid rgba(22, 50, 79, 0.14);
+  border-radius: 18px;
+  background: rgba(255, 251, 240, 0.92);
+  box-shadow: 0 18px 45px rgba(22, 50, 79, 0.16);
+  backdrop-filter: blur(14px);
+}
+
+.floating-notes-meta {
+  display: grid;
+  gap: 2px;
+}
+
+.floating-notes-meta strong {
+  font-size: 0.92rem;
+}
+
+.floating-notes-meta span {
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+}
+
+.floating-notes-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.floating-notes-actions.is-collapsed {
+  display: none;
+}
+
+.floating-action-button {
+  border: 0;
+  border-radius: 999px;
+  padding: 10px 14px;
+  background: #17385f;
+  color: #fff;
+  cursor: pointer;
+  transition: transform 120ms ease;
+}
+
+.floating-action-button:hover {
+  transform: translateY(-1px);
+}
+
+.floating-action-button.subtle {
+  background: rgba(22, 50, 79, 0.1);
+  color: #17385f;
+}
+
+.floating-action-button.active {
+  background: #d65445;
+}
+
+.floating-action-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.floating-notes-placement-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 55;
+  cursor: crosshair;
+  background: rgba(248, 251, 255, 0.08);
+}
+
+.floating-placement-hint {
+  position: sticky;
+  left: 50%;
+  top: 18px;
+  transform: translateX(-50%);
+  width: fit-content;
+  margin: 18px auto 0;
+  padding: 12px 16px;
+  border-radius: 999px;
+  background: rgba(22, 50, 79, 0.88);
+  color: #fff;
+  font-size: 0.92rem;
+}
+
+.floating-notes-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 70;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.floating-note {
+  position: absolute;
+  width: min(280px, calc(100% - 24px));
+  padding: 10px 28px 10px 12px;
+  border-left: 3px solid rgba(214, 84, 69, 0.65);
+  border-radius: 10px;
+  background: rgba(255, 247, 220, 0.96);
+  box-shadow: 0 10px 24px rgba(138, 109, 17, 0.12);
+  color: #5a4210;
+  pointer-events: auto;
+}
+
+.floating-note p {
+  margin: 0;
+  white-space: pre-wrap;
+  font-size: 0.95rem;
+  line-height: 1.45;
+}
+
+.floating-note.draft {
+  width: min(320px, calc(100% - 24px));
+}
+
+.floating-note textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 110px;
+  border: 0;
+  background: rgba(255, 255, 255, 0.45);
+  border-radius: 12px;
+  padding: 12px;
+  color: inherit;
+}
+
+.floating-note-delete {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(77, 60, 16, 0.1);
+  color: inherit;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.floating-note:hover .floating-note-delete,
+.floating-note:focus-within .floating-note-delete {
+  opacity: 1;
+}
+
+.floating-note-draft-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+}
+
 .page-header {
   margin-bottom: 24px;
 }
@@ -224,9 +387,27 @@ td {
 }
 
 @media (max-width: 720px) {
+  .floating-notes-toolbar {
+    top: auto;
+    right: 12px;
+    bottom: 12px;
+    left: 12px;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .floating-notes-actions {
+    justify-content: stretch;
+  }
+
+  .floating-notes-actions .floating-action-button {
+    flex: 1;
+  }
+
   .page-shell {
     padding-inline: 14px;
     padding-top: 20px;
+    padding-bottom: 96px;
   }
 
   .state-panel,

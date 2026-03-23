@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { FloatingNotes } from './components/FloatingNotes'
 import { SummaryCards } from './components/SummaryCards'
 import { SessionsTable } from './components/SessionsTable'
 import { CumulativeWinsChart } from './components/charts/CumulativeWinsChart'
@@ -68,46 +69,49 @@ function App() {
 
   return (
     <main className="page-shell">
-      <section className="page-header">
-        <p className="eyebrow">Card Game Dashboard</p>
-        <h1>Big 2 Stats</h1>
-        <p className="subtitle">Owen vs Fiona</p>
-      </section>
-
-      {isLoading ? (
-        <section className="panel state-panel">
-          <h2>Loading sessions</h2>
-          <p>Fetching the published Google Sheets CSV and building the dashboard.</p>
+      <FloatingNotes />
+      <div className="page-canvas">
+        <section className="page-header">
+          <p className="eyebrow">Card Game Dashboard</p>
+          <h1>Big 2 Stats</h1>
+          <p className="subtitle">Owen vs Fiona</p>
         </section>
-      ) : null}
 
-      {!isLoading && error ? (
-        <section className="panel state-panel error-panel">
-          <h2>Could not load data</h2>
-          <p>{error}</p>
-        </section>
-      ) : null}
-
-      {!isLoading && !error && sessions.length === 0 ? (
-        <section className="panel state-panel">
-          <h2>No sessions yet</h2>
-          <p>The sheet loaded successfully, but it does not contain any usable rows.</p>
-        </section>
-      ) : null}
-
-      {!isLoading && !error && sessions.length > 0 ? (
-        <div className="dashboard-grid">
-          <SummaryCards stats={stats} />
-
-          <section className="panel charts-grid">
-            <CumulativeWinsChart points={stats.cumulativeWinsSeries} />
-            <SessionWinsChart sessions={stats.sessionsByDate} />
-            <LocationBreakdownChart rows={stats.winsByLocation} />
+        {isLoading ? (
+          <section className="panel state-panel">
+            <h2>Loading sessions</h2>
+            <p>Fetching the published Google Sheets CSV and building the dashboard.</p>
           </section>
+        ) : null}
 
-          <SessionsTable sessions={stats.sessionsForDisplay} />
-        </div>
-      ) : null}
+        {!isLoading && error ? (
+          <section className="panel state-panel error-panel">
+            <h2>Could not load data</h2>
+            <p>{error}</p>
+          </section>
+        ) : null}
+
+        {!isLoading && !error && sessions.length === 0 ? (
+          <section className="panel state-panel">
+            <h2>No sessions yet</h2>
+            <p>The sheet loaded successfully, but it does not contain any usable rows.</p>
+          </section>
+        ) : null}
+
+        {!isLoading && !error && sessions.length > 0 ? (
+          <div className="dashboard-grid">
+            <SummaryCards stats={stats} />
+
+            <section className="panel charts-grid">
+              <CumulativeWinsChart points={stats.cumulativeWinsSeries} />
+              <SessionWinsChart sessions={stats.sessionsByDate} />
+              <LocationBreakdownChart rows={stats.winsByLocation} />
+            </section>
+
+            <SessionsTable sessions={stats.sessionsForDisplay} />
+          </div>
+        ) : null}
+      </div>
     </main>
   )
 }

@@ -1,0 +1,241 @@
+:root {
+  font-family:
+    "IBM Plex Sans",
+    "Avenir Next",
+    "Segoe UI",
+    sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  color: #16324f;
+  background:
+    radial-gradient(circle at top left, rgba(255, 211, 138, 0.45), transparent 28%),
+    linear-gradient(180deg, #f8fbff 0%, #eef5fb 100%);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  --page-max-width: 1180px;
+  --panel-bg: rgba(255, 255, 255, 0.88);
+  --panel-border: rgba(22, 50, 79, 0.12);
+  --shadow: 0 18px 50px rgba(37, 74, 112, 0.08);
+  --owen: #1d6fdc;
+  --fiona: #d65445;
+  --ink-soft: #5f7288;
+  --surface-strong: #f3f8fd;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+a {
+  color: inherit;
+}
+
+.page-shell {
+  width: min(100%, var(--page-max-width));
+  margin: 0 auto;
+  padding: 32px 20px 56px;
+}
+
+.page-header {
+  margin-bottom: 24px;
+}
+
+.eyebrow {
+  margin: 0 0 10px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.page-header h1 {
+  margin: 0;
+  font-size: clamp(2.4rem, 4vw, 4.4rem);
+  line-height: 0.95;
+  letter-spacing: -0.06em;
+}
+
+.subtitle {
+  margin: 12px 0 0;
+  font-size: 1.15rem;
+  color: var(--ink-soft);
+}
+
+.dashboard-grid {
+  display: grid;
+  gap: 20px;
+}
+
+.summary-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+}
+
+.panel,
+.stat-card {
+  border: 1px solid var(--panel-border);
+  border-radius: 22px;
+  background: var(--panel-bg);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(12px);
+}
+
+.state-panel,
+.table-panel,
+.charts-grid {
+  padding: 22px;
+}
+
+.error-panel {
+  border-color: rgba(214, 84, 69, 0.28);
+}
+
+.stat-card {
+  padding: 18px;
+}
+
+.stat-card h2,
+.panel h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.stat-value {
+  margin-top: 14px;
+  font-size: clamp(1.8rem, 3vw, 2.7rem);
+  font-weight: 700;
+  line-height: 1;
+}
+
+.stat-caption {
+  margin-top: 10px;
+  color: var(--ink-soft);
+  font-size: 0.95rem;
+}
+
+.owen-accent .stat-value,
+.winner-owen {
+  color: var(--owen);
+}
+
+.fiona-accent .stat-value,
+.winner-fiona {
+  color: var(--fiona);
+}
+
+.neutral-accent .stat-value,
+.winner-tie {
+  color: #82661a;
+}
+
+.charts-grid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.chart-panel {
+  display: grid;
+  gap: 12px;
+  min-height: 320px;
+}
+
+.chart-copy p,
+.table-copy p {
+  margin: 6px 0 0;
+  color: var(--ink-soft);
+  font-size: 0.95rem;
+}
+
+.chart-wrap {
+  position: relative;
+  min-height: 240px;
+}
+
+.table-panel {
+  overflow: hidden;
+}
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  padding: 14px 12px;
+  text-align: left;
+  border-bottom: 1px solid rgba(22, 50, 79, 0.08);
+  vertical-align: top;
+}
+
+th {
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-soft);
+}
+
+td {
+  font-size: 0.96rem;
+}
+
+.muted {
+  color: var(--ink-soft);
+}
+
+.people-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.person-chip {
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: var(--surface-strong);
+  color: #224260;
+  font-size: 0.84rem;
+}
+
+@media (max-width: 720px) {
+  .page-shell {
+    padding-inline: 14px;
+    padding-top: 20px;
+  }
+
+  .state-panel,
+  .table-panel,
+  .charts-grid {
+    padding: 18px;
+  }
+
+  .chart-panel {
+    min-height: 280px;
+  }
+}

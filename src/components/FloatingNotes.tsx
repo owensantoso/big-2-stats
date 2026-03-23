@@ -22,6 +22,8 @@ type DragState = {
 
 const STORAGE_KEY = 'big-2-stats-floating-notes'
 const CLEAR_ALL_PASSWORD = 'omegalul'
+const MIN_X_PERCENT = 1
+const MAX_X_PERCENT = 92
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max)
@@ -86,7 +88,7 @@ function loadNotes(): FloatingNote[] {
           {
             id: note.id,
             text: note.text,
-            xPercent: clamp(maybeXPercent, 1, 76),
+            xPercent: clamp(maybeXPercent, MIN_X_PERCENT, MAX_X_PERCENT),
             yOffset: Math.max(maybeYOffset, 0),
             createdAt: toIsoStringOrNow('createdAt' in note ? note.createdAt : null),
           },
@@ -156,8 +158,8 @@ export function FloatingNotes() {
       const bounds = canvasElement.getBoundingClientRect()
       const nextXPercent = clamp(
         ((event.clientX - bounds.left - dragState.pointerOffsetX) / bounds.width) * 100,
-        1,
-        76,
+        MIN_X_PERCENT,
+        MAX_X_PERCENT,
       )
       const nextYOffset = Math.max(
         event.clientY - bounds.top - dragState.pointerOffsetY,
@@ -212,8 +214,8 @@ export function FloatingNotes() {
     const bounds = event.currentTarget.getBoundingClientRect()
     const xPercent = clamp(
       ((event.clientX - bounds.left) / bounds.width) * 100,
-      1,
-      76,
+      MIN_X_PERCENT,
+      MAX_X_PERCENT,
     )
     const yOffset = Math.max(event.clientY - bounds.top, 0)
 

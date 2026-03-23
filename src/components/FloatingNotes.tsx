@@ -49,6 +49,8 @@ const DRAWING_HEIGHT = 120
 const IMAGE_MAX_DIMENSION = 256
 const IMAGE_DEEP_FRY_PASSES = 5
 const IMAGE_JPEG_QUALITY = 0.12
+const CLOUDINARY_CLOUD_NAME = 'dssd1vgyz'
+const CLOUDINARY_UPLOAD_PRESET = 'big2stats'
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max)
@@ -144,15 +146,6 @@ async function deepFryImageFile(file: File): Promise<Blob> {
 }
 
 async function uploadImageToCloudinary(file: File): Promise<string> {
-  const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME?.trim()
-  const uploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET?.trim()
-
-  if (!cloudName || !uploadPreset) {
-    throw new Error(
-      'Missing Cloudinary config. Set VITE_CLOUDINARY_CLOUD_NAME and VITE_CLOUDINARY_UPLOAD_PRESET.',
-    )
-  }
-
   const compressedBlob = await deepFryImageFile(file)
   const formData = new FormData()
   formData.append(
@@ -160,12 +153,15 @@ async function uploadImageToCloudinary(file: File): Promise<string> {
     compressedBlob,
     `${file.name.replace(/\.[^.]+$/, '') || 'annotation'}-deepfried.jpg`,
   )
-  formData.append('upload_preset', uploadPreset)
+  formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET)
 
-  const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+  const response = await fetch(
+    `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`,
+    {
     method: 'POST',
     body: formData,
-  })
+    },
+  )
 
   if (!response.ok) {
     throw new Error(`Cloudinary upload failed with ${response.status}.`)

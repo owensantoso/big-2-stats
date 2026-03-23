@@ -9,6 +9,7 @@ type FloatingNote = {
   xPercent: number
   yOffset: number
   createdAt: string
+  updatedAt: string
 }
 
 type DraftTextNote = {
@@ -51,6 +52,8 @@ const IMAGE_DEEP_FRY_PASSES = 5
 const IMAGE_JPEG_QUALITY = 0.12
 const CLOUDINARY_CLOUD_NAME = 'dssd1vgyz'
 const CLOUDINARY_UPLOAD_PRESET = 'big2stats'
+const ANNOTATIONS_API_URL =
+  'https://script.google.com/macros/s/AKfycbwtpUQcVDcZorRwmeShPcLjGtunxDf5E5CvUe9FmGoDDA_31z1IlSWrXMP2I41-MieA/exec'
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max)
@@ -187,6 +190,114 @@ function toIsoStringOrNow(value: unknown): string {
   return new Date().toISOString()
 }
 
+type AnnotationApiPayload = {
+  id?: unknown
+  type?: unknown
+  text?: unknown
+  imageUrl?: unknown
+  drawingData?: unknown
+  x?: unknown
+  y?: unknown
+  createdAt?: unknown
+  updatedAt?: unknown
+}
+
+function normalizeApiNote(note: AnnotationApiPayload): FloatingNote | null {
+  if (typeof note.id !== 'string' || note.id.trim().length === 0) {
+    return null
+  }
+
+  const text = typeof note.text === 'string' ? note.text : ''
+  const drawingUrl = typeof note.drawingData === 'string' && note.drawingData ? note.drawingData : null
+  const imageUrl = typeof note.imageUrl === 'string' && note.imageUrl ? note.imageUrl : null
+  const xPercent = typeof note.x === 'number' ? note.x : Number(note.x ?? NaN)
+  const yOffset = typeof note.y === 'number' ? note.y : Number(note.y ?? NaN)
+
+  if (
+    Number.isNaN(xPercent) ||
+    Number.isNaN(yOffset) ||
+    (text.trim().length === 0 && !drawingUrl && !imageUrl)
+  ) {
+    return null
+  }
+
+  return {
+    id: note.id,
+    type:
+      note.type === 'drawing'
+        ? 'drawing'
+        : note.type === 'image'
+          ? 'image'
+          : imageUrl
+            ? 'image'
+            : drawingUrl && text.trim().length === 0
+              ? 'drawing'
+              : 'text',
+    text,
+    drawingUrl,
+    imageUrl,
+    xPercent: clamp(xPercent, MIN_X_PERCENT, MAX_X_PERCENT),
+    yOffset: Math.max(yOffset, 0),
+    createdAt: toIsoStringOrNow(note.createdAt),
+    updatedAt: toIsoStringOrNow(note.updatedAt),
+  }
+}
+
+function serializeNoteForApi(note: FloatingNote) {
+  return {
+    id: note.id,
+    type: note.type,
+    text: note.text,
+    imageUrl: note.imageUrl ?? '',
+    drawingData: note.drawingUrl ?? '',
+    x: note.xPercent,
+    y: note.yOffset,
+    createdAt: note.createdAt,
+    updatedAt: note.updatedAt,
+  }
+}
+
+async function fetchRemoteNotes(): Promise<FloatingNote[]> {
+  const response = await fetch(ANNOTATIONS_API_URL, {
+    method: 'GET',
+  })
+
+  if (!response.ok) {
+    throw new Error(`Annotations request failed with ${response.status}.`)
+  }
+
+  const payload = (await response.json()) as unknown
+
+  if (!Array.isArray(payload)) {
+    throw new Error('Annotations response was not a list.')
+  }
+
+  return payload.flatMap((note) => {
+    if (typeof note !== 'object' || note === null) {
+      return []
+    }
+
+    const normalized = normalizeApiNote(note as AnnotationApiPayload)
+    return normalized ? [normalized] : []
+  })
+}
+
+async function postAnnotationsAction<T>(body: Record<string, unknown>): Promise<T> {
+  const response = await fetch(ANNOTATIONS_API_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'text/plain;charset=utf-8',
+    },
+    body: JSON.stringify(body),
+  })
+
+  if (!response.ok) {
+    throw new Error(`Annotations update failed with ${response.status}.`)
+  }
+
+  return (await response.json()) as T
+}
+
 function loadNotes(): FloatingNote[] {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY)
@@ -251,6 +362,7 @@ function loadNotes(): FloatingNote[] {
             xPercent: clamp(maybeXPercent, MIN_X_PERCENT, MAX_X_PERCENT),
             yOffset: Math.max(maybeYOffset, 0),
             createdAt: toIsoStringOrNow('createdAt' in note ? note.createdAt : null),
+            updatedAt: toIsoStringOrNow('updatedAt' in note ? note.updatedAt : null),
           },
         ]
       }
@@ -309,12 +421,48 @@ export function FloatingNotes() {
   const [showWrongPassword, setShowWrongPassword] = useState(false)
   const [highlightedNoteId, setHighlightedNoteId] = useState<string | null>(null)
   const [dragState, setDragState] = useState<DragState>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const notesRef = useRef<FloatingNote[]>(notes)
   const drawingCanvasRef = useRef<HTMLCanvasElement | null>(null)
   const isDrawingRef = useRef(false)
 
   useEffect(() => {
+    notesRef.current = notes
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(notes))
   }, [notes])
+
+  useEffect(() => {
+    let isMounted = true
+
+    const syncRemoteNotes = async () => {
+      try {
+        const remoteNotes = await fetchRemoteNotes()
+
+        if (!isMounted) {
+          return
+        }
+
+        setNotes(remoteNotes)
+        setLoadError(null)
+      } catch (error) {
+        if (!isMounted) {
+          return
+        }
+
+        setLoadError(
+          error instanceof Error
+            ? error.message
+            : 'Shared annotations could not be loaded.',
+        )
+      }
+    }
+
+    void syncRemoteNotes()
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
 
   useEffect(() => {
     if (!highlightedNoteId) {
@@ -405,6 +553,28 @@ export function FloatingNotes() {
     }
 
     const stopDragging = () => {
+      if (dragState?.kind === 'saved-note' && dragState.id) {
+        const movedNote = notesRef.current.find((note) => note.id === dragState.id)
+
+        if (movedNote) {
+          const updatedNote = {
+            ...movedNote,
+            updatedAt: new Date().toISOString(),
+          }
+
+          setNotes((currentNotes) =>
+            currentNotes.map((note) => (note.id === updatedNote.id ? updatedNote : note)),
+          )
+
+          void postAnnotationsAction<{ ok?: boolean; error?: string }>({
+            action: 'update',
+            annotation: serializeNoteForApi(updatedNote),
+          }).catch(() => {
+            setLoadError('Shared annotations could not save the moved position.')
+          })
+        }
+      }
+
       setDragState(null)
     }
 
@@ -477,7 +647,7 @@ export function FloatingNotes() {
     setPlacementMode(null)
   }
 
-  const saveDraftTextNote = () => {
+  const saveDraftTextNote = async () => {
     if (!draftTextNote) {
       return
     }
@@ -489,20 +659,32 @@ export function FloatingNotes() {
       return
     }
 
-    setNotes((currentNotes) => [
-      ...currentNotes,
-      {
-        id: createNoteId(),
-        type: 'text',
-        text,
-        drawingUrl: null,
-        imageUrl: null,
-        xPercent: draftTextNote.xPercent,
-        yOffset: draftTextNote.yOffset,
-        createdAt: new Date().toISOString(),
-      },
-    ])
+    const nextNote: FloatingNote = {
+      id: createNoteId(),
+      type: 'text',
+      text,
+      drawingUrl: null,
+      imageUrl: null,
+      xPercent: draftTextNote.xPercent,
+      yOffset: draftTextNote.yOffset,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }
+
+    setNotes((currentNotes) => [...currentNotes, nextNote])
     setDraftTextNote(null)
+
+    try {
+      await postAnnotationsAction<{ ok?: boolean; error?: string }>({
+        action: 'create',
+        annotation: serializeNoteForApi(nextNote),
+      })
+      setLoadError(null)
+    } catch (error) {
+      setLoadError(
+        error instanceof Error ? error.message : 'Shared annotations could not save this note.',
+      )
+    }
   }
 
   const clearDraftDrawing = () => {
@@ -511,27 +693,38 @@ export function FloatingNotes() {
     }
   }
 
-  const saveDraftDrawingNote = () => {
+  const saveDraftDrawingNote = async () => {
     if (!draftDrawingNote || !drawingCanvasRef.current) {
       return
     }
 
     const drawingUrl = drawingCanvasRef.current.toDataURL('image/png')
+    const nextNote: FloatingNote = {
+      id: createNoteId(),
+      type: 'drawing',
+      text: '',
+      drawingUrl,
+      imageUrl: null,
+      xPercent: draftDrawingNote.xPercent,
+      yOffset: draftDrawingNote.yOffset,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }
 
-    setNotes((currentNotes) => [
-      ...currentNotes,
-      {
-        id: createNoteId(),
-        type: 'drawing',
-        text: '',
-        drawingUrl,
-        imageUrl: null,
-        xPercent: draftDrawingNote.xPercent,
-        yOffset: draftDrawingNote.yOffset,
-        createdAt: new Date().toISOString(),
-      },
-    ])
+    setNotes((currentNotes) => [...currentNotes, nextNote])
     setDraftDrawingNote(null)
+
+    try {
+      await postAnnotationsAction<{ ok?: boolean; error?: string }>({
+        action: 'create',
+        annotation: serializeNoteForApi(nextNote),
+      })
+      setLoadError(null)
+    } catch (error) {
+      setLoadError(
+        error instanceof Error ? error.message : 'Shared annotations could not save this drawing.',
+      )
+    }
   }
 
   const handleDraftImageSelection = async (
@@ -573,23 +766,32 @@ export function FloatingNotes() {
       )
 
       const imageUrl = await uploadImageToCloudinary(draftImageNote.file)
+      const nextNote: FloatingNote = {
+        id: createNoteId(),
+        type: 'image',
+        text: '',
+        drawingUrl: null,
+        imageUrl,
+        xPercent: draftImageNote.xPercent,
+        yOffset: draftImageNote.yOffset,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }
 
-      setNotes((currentNotes) => [
-        ...currentNotes,
-        {
-          id: createNoteId(),
-          type: 'image',
-          text: '',
-          drawingUrl: null,
-          imageUrl,
-          xPercent: draftImageNote.xPercent,
-          yOffset: draftImageNote.yOffset,
-          createdAt: new Date().toISOString(),
-        },
-      ])
+      setNotes((currentNotes) => [...currentNotes, nextNote])
       setDraftImageNote(null)
+
+      await postAnnotationsAction<{ ok?: boolean; error?: string }>({
+        action: 'create',
+        annotation: serializeNoteForApi(nextNote),
+      })
+      setLoadError(null)
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : 'Image upload failed.')
+      window.alert(
+        error instanceof Error
+          ? error.message
+          : 'Image upload or shared annotation save failed.',
+      )
       setDraftImageNote((currentDraft) =>
         currentDraft
           ? {
@@ -616,7 +818,7 @@ export function FloatingNotes() {
     })
   }
 
-  const deleteNote = (id: string) => {
+  const deleteNote = async (id: string) => {
     const enteredPassword = window.prompt(
       'Enter the annotation delete password to remove this annotation:',
     )
@@ -629,6 +831,18 @@ export function FloatingNotes() {
     setNotes((currentNotes) => currentNotes.filter((note) => note.id !== id))
     if (highlightedNoteId === id) {
       setHighlightedNoteId(null)
+    }
+
+    try {
+      await postAnnotationsAction<{ ok?: boolean; error?: string }>({
+        action: 'delete',
+        id,
+      })
+      setLoadError(null)
+    } catch (error) {
+      setLoadError(
+        error instanceof Error ? error.message : 'Shared annotations could not delete this note.',
+      )
     }
   }
 
@@ -693,7 +907,7 @@ export function FloatingNotes() {
     })
   }
 
-  const clearAllNotes = () => {
+  const clearAllNotes = async () => {
     const enteredPassword = window.prompt(
       'Enter the annotation clear password to remove all annotations:',
     )
@@ -707,6 +921,17 @@ export function FloatingNotes() {
     resetDrafts()
     setIsEditingPositions(false)
     setHighlightedNoteId(null)
+
+    try {
+      await postAnnotationsAction<{ ok?: boolean; error?: string }>({
+        action: 'clear',
+      })
+      setLoadError(null)
+    } catch (error) {
+      setLoadError(
+        error instanceof Error ? error.message : 'Shared annotations could not be cleared.',
+      )
+    }
   }
 
   const startPlacementMode = (mode: 'text' | 'drawing' | 'image') => {
@@ -867,6 +1092,8 @@ export function FloatingNotes() {
               Drag any note or drawing on the page to reposition it.
             </p>
           ) : null}
+
+          {loadError ? <p className="annotation-sidebar-empty">{loadError}</p> : null}
         </div>
       </aside>
 
@@ -902,7 +1129,7 @@ export function FloatingNotes() {
               className="floating-note-delete"
               type="button"
               aria-label="Delete note"
-              onClick={() => deleteNote(note.id)}
+                onClick={() => void deleteNote(note.id)}
             >
               ×
             </button>
@@ -963,7 +1190,7 @@ export function FloatingNotes() {
               <button
                 className="floating-action-button"
                 type="button"
-                onClick={saveDraftTextNote}
+                onClick={() => void saveDraftTextNote()}
               >
                 Save text
               </button>
@@ -1010,7 +1237,7 @@ export function FloatingNotes() {
               <button
                 className="floating-action-button"
                 type="button"
-                onClick={saveDraftDrawingNote}
+                onClick={() => void saveDraftDrawingNote()}
               >
                 Save drawing
               </button>

@@ -1,6 +1,8 @@
 # Big 2 Stats Dashboard
 
 Tiny static dashboard for tracking Owen vs Fiona Big 2 sessions from a published Google Sheets CSV.
+<img width="1489" height="904" alt="image" src="https://github.com/user-attachments/assets/8868e002-4cc4-4325-93de-f520999ec1d1" />
+
 
 ## Stack
 

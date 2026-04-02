@@ -1,4 +1,4 @@
-import { formatDisplayDate } from '../lib/dates'
+import { formatDisplayDate, formatShortcutDate } from '../lib/dates'
 import { getSessionWinner } from '../lib/stats'
 import type { SessionRow } from '../types/session'
 
@@ -29,6 +29,9 @@ export function SessionsTable({ sessions }: SessionsTableProps) {
           <tbody>
             {sessions.map((session, index) => {
               const winner = getSessionWinner(session)
+              const displayDate = formatDisplayDate(session.date, session.rawDate)
+              const shortcutDate = formatShortcutDate(session.date, session.rawDate)
+              const shortcutUrl = `shortcuts://x-callback-url/run-shortcut?name=SearchPhotos&input=text&text=${encodeURIComponent(shortcutDate)}`
               const winnerClassName =
                 winner === 'Owen'
                   ? 'winner-owen'
@@ -38,7 +41,14 @@ export function SessionsTable({ sessions }: SessionsTableProps) {
 
               return (
                 <tr key={`${session.rawDate}-${session.location}-${index}`}>
-                  <td>{formatDisplayDate(session.date, session.rawDate)}</td>
+                  <td>
+                    <a
+                      className="date-shortcut-link"
+                      href={shortcutUrl}
+                    >
+                      {displayDate}
+                    </a>
+                  </td>
                   <td>{session.owenWins}</td>
                   <td>{session.fionaWins}</td>
                   <td className={winnerClassName}>{winner}</td>

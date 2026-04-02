@@ -749,6 +749,19 @@ td {
   font-size: 0.96rem;
 }
 
+.date-shortcut-link {
+  color: inherit;
+  text-decoration: none;
+  border-bottom: 1px solid rgba(29, 111, 220, 0.18);
+  transition: color 120ms ease, border-color 120ms ease;
+}
+
+.date-shortcut-link:hover,
+.date-shortcut-link:focus-visible {
+  color: var(--owen);
+  border-color: rgba(29, 111, 220, 0.42);
+}
+
 .muted {
   color: var(--ink-soft);
 }
